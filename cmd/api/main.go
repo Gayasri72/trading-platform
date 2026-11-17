@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gayasri72/trading-platform/internal/database"
+	"github.com/gayasri72/trading-platform/internal/market"
 	"github.com/joho/godotenv"
 )
 
@@ -19,14 +19,13 @@ type HealthResponse struct {
 }
 
 func main() {
-	// Load environment variables from .env (local development)
+	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found; using system environment variables")
 	}
 
 	// Database configuration
 	databaseURL := os.Getenv("DATABASE_URL")
-
 	if databaseURL == "" {
 		log.Fatal("DATABASE_URL is required")
 	}
@@ -46,25 +45,21 @@ func main() {
 
 	log.Println("Connected to PostgreSQL")
 
-	// HTTP routes
+	// HTTP router
 	mux := http.NewServeMux()
 
-	// Liveness check
+	// Health endpoints
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("GoTrade API is alive"))
 	})
 
-	// Readiness check (includes database connectivity)
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
-		err := db.Ping(ctx)
-
-		w.Header().Set("Content-Type", "application/json")
-
-		if err != nil {
+		if err := db.Ping(ctx); err != nil {
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			json.NewEncoder(w).Encode(HealthResponse{
 				Status:   "not_ready",
@@ -73,13 +68,24 @@ func main() {
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(HealthResponse{
 			Status:   "ready",
 			Database: "connected",
 		})
 	})
 
-	// HTTP server configuration
+	// Day 2: Market module
+	marketRepo := market.NewRepository(db)
+	marketHandler := market.NewHandler(marketRepo)
+
+	mux.HandleFunc("GET /api/v1/assets", marketHandler.ListAssets)
+	mux.HandleFunc("GET /api/v1/assets/{symbol}", marketHandler.GetAsset)
+
+	mux.HandleFunc("GET /api/v1/markets", marketHandler.ListMarkets)
+	mux.HandleFunc("GET /api/v1/markets/{symbol}", marketHandler.GetMarket)
+
+	// HTTP server
 	server := &http.Server{
 		Addr:         ":" + port,
 		Handler:      mux,
