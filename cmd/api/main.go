@@ -10,6 +10,7 @@ import (
 
 	"github.com/gayasri72/trading-platform/internal/database"
 	"github.com/gayasri72/trading-platform/internal/market"
+	"github.com/gayasri72/trading-platform/internal/order"
 	"github.com/gayasri72/trading-platform/internal/wallet"
 	"github.com/joho/godotenv"
 )
@@ -85,12 +86,21 @@ func main() {
 
 	mux.HandleFunc("GET /api/v1/markets", marketHandler.ListMarkets)
 	mux.HandleFunc("GET /api/v1/markets/{symbol}", marketHandler.GetMarket)
-
+	//day 3
 	walletRepo := wallet.NewRepository(db)
 	walletHandler := wallet.NewHandler(walletRepo)
 
 	mux.HandleFunc("GET /api/v1/wallets", walletHandler.GetBalances)
 	mux.HandleFunc("GET /api/v1/wallets/ledger", walletHandler.GetLedger)
+
+	//day 4
+	orderRepo := order.NewRepository(db)
+	orderService := order.NewService(orderRepo)
+	orderHandler := order.NewHandler(orderService, orderRepo)
+
+	mux.HandleFunc("POST /api/v1/orders", orderHandler.Create)
+	mux.HandleFunc("GET /api/v1/orders", orderHandler.List)
+	mux.HandleFunc("DELETE /api/v1/orders/{id}", orderHandler.Cancel)
 
 	// HTTP server
 	server := &http.Server{
